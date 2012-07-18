@@ -17,10 +17,13 @@ node_config = lambda do |config, args|
   set_default_gw = "route add default gw #{default_gw};"
   if(args[:box_url])
     config.vm.box_url = args[:box_url]
-  elsif(args[:box])
-    config.vm.box = args[:box]
   else
     config.vm.box_url = 'https://github.com/downloads/chrisroberts/vagrant-boxes/precise-64.box'
+  end
+  if(args[:box])
+    config.vm.box = args[:box]
+  else
+    config.vm.box = File.basename(config.vm.box_url).sub('.box', '')
   end
   config.vm.customize do |vm|
     vm.memory_size = 1024
