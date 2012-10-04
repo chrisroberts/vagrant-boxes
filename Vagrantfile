@@ -1,9 +1,11 @@
 username = ENV['OPSCODE_USER'] || ENV['USER']
 chef_base = ENV['CHEF_REPO'] || File.expand_path('.')
-default_gw = ENV['DEFAULT_GATEWAY'] || %x{ip route show}.split("\n").detect{|l|l.include?('default')}.scan(/\d+\.\d+\.\d+\.\d+/).first
+default_gw = ENV['DEFAULT_GATEWAY']
+default_gw ||= %x{ip route show}.split("\n").detect{|l|l.include?('default')}.scan(/\d+\.\d+\.\d+\.\d+/).first if File.exists?('/bin/ip')
 server_url = ENV['CHEF_SERVER_URL']
 validation_key = ENV['CHEF_VALIDATION_KEY']
 client_name = ENV['CHEF_CLIENT_NAME']
+share_dir = ENV['CHEF_SHARE_DIR'] = '/tmp/chef_share'
 default_run_list = ENV['CHEF_DEFAULT_RUNLIST'] ? ENV['CHEF_DEFAULT_RUNLIST'].split(',') : %w()
 if(File.exists?(c = File.join(chef_base, '.chef', 'knife.rb')))
   conf_file = File.readlines(c)
@@ -11,6 +13,8 @@ if(File.exists?(c = File.join(chef_base, '.chef', 'knife.rb')))
   client_name = conf_file.detect{|l|l.include?('validation_client_name')}.to_s.split(' ').last.gsub(/["']/, '') unless client_name
   validation_key = File.join(chef_base, '.chef', File.basename(conf_file.detect{|l|l.include?('validation_key')}.to_s.split(' ').last.gsub(/["']/, ''))) unless validation_key
 end
+
+Dir.mkdir(share_dir) unless File.directory?(share_dir)
 
 node_config = lambda do |config, args|
   args ||= {}
@@ -29,8 +33,9 @@ node_config = lambda do |config, args|
     vm.memory_size = 1024
   end
   config.vm.provision :shell do |shell|
-    shell.inline = "/etc/init.d/ntp stop; ntpdate pool.ntp.org; #{set_default_gw}"
+    shell.inline = "/etc/init.d/ntpd stop; ntpdate pool.ntp.org;" # #{set_default_gw}"
   end
+  config.vm.share_folder('v-data', '/vagrant_data', share_dir)
   config.vm.network :bridged
   config.vm.host_name = args[:hostname] || args[:node_name].split('.').first
   config.vm.provision :chef_client do |chef|
@@ -69,4 +74,12 @@ Vagrant::Config.run do |config|
     )
   end
 
+  config.vm.define :centos63 do |centos63_config|
+    node_config.call(
+      centos63_config,
+      :node_name => "centos63.#{username}",
+      :run_list => %w(role[base]),
+      :box_url => 'https://github.com/downloads/chrisroberts/vagrant-boxes/centos63-64.box'
+    )
+  end
 end
